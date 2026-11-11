@@ -128,6 +128,14 @@ class ChessEngineBridge(private val board: Board = Board()) {
     }
 
     /**
+     * Calcula la mejor jugada para el bot según la dificultad actual.
+     */
+    fun findBestBotMove(difficulty: com.mirandadevsource.ajedrezzz.domain.ai.BotDifficulty): Pair<Position, Position>? {
+        val bot = com.mirandadevsource.ajedrezzz.domain.ai.ChessBotEngine()
+        return bot.findBestMove(board, difficulty)
+    }
+
+    /**
      * Identifica casillas que contienen piezas del color actual que están amenazadas
      * por el oponente (soporte pedagógico para detección de blunders y piezas colgadas).
      */

@@ -1,10 +1,20 @@
 package com.mirandadevsource.ajedrezzz.ui
 
+import com.mirandadevsource.ajedrezzz.domain.ai.BotDifficulty
 import com.mirandadevsource.ajedrezzz.domain.model.GameStatus
 import com.mirandadevsource.ajedrezzz.domain.model.PieceColor
 import com.mirandadevsource.ajedrezzz.domain.model.Position
 import com.mirandadevsource.ajedrezzz.ui.game.ChessUiEvent
 import com.mirandadevsource.ajedrezzz.ui.game.ChessViewModel
+import com.mirandadevsource.ajedrezzz.ui.game.GameMode
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -13,13 +23,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ChessViewModelTest {
 
+    private val testDispatcher = StandardTestDispatcher()
     private lateinit var viewModel: ChessViewModel
 
     @Before
     fun setUp() {
-        viewModel = ChessViewModel()
+        Dispatchers.setMain(testDispatcher)
+        viewModel = ChessViewModel(botDispatcher = testDispatcher)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
     }
 
     @Test
@@ -31,6 +49,9 @@ class ChessViewModelTest {
         assertFalse(state.canUndo)
         assertFalse(state.isFlipped)
         assertFalse(state.isAutoFlipEnabled)
+        assertEquals(GameMode.PASS_AND_PLAY, state.gameMode)
+        assertEquals(BotDifficulty.EASY, state.botDifficulty)
+        assertFalse(state.isBotThinking)
         assertEquals("Turno de las Blancas", state.statusMessage)
         assertEquals(64, state.squares.size)
     }
@@ -206,5 +227,37 @@ class ChessViewModelTest {
         val stateAfterUndo = viewModel.uiState.value
         assertEquals(0, stateAfterUndo.whiteMaterialAdvantage)
         assertEquals(0, stateAfterUndo.blackMaterialAdvantage)
+    }
+
+    @Test
+    fun `change game mode and bot difficulty`() {
+        viewModel.onEvent(ChessUiEvent.ChangeGameMode(GameMode.VS_BOT))
+        assertEquals(GameMode.VS_BOT, viewModel.uiState.value.gameMode)
+
+        viewModel.onEvent(ChessUiEvent.ChangeBotDifficulty(BotDifficulty.MEDIUM))
+        assertEquals(BotDifficulty.MEDIUM, viewModel.uiState.value.botDifficulty)
+    }
+
+    @Test
+    fun `in vs bot mode bot responds after player move and undo reverts both moves`() = runTest {
+        viewModel.onEvent(ChessUiEvent.ChangeGameMode(GameMode.VS_BOT))
+
+        // White plays e2-e4
+        viewModel.onEvent(ChessUiEvent.SquareClicked(Position.fromAlgebraic("e2")))
+        viewModel.onEvent(ChessUiEvent.SquareClicked(Position.fromAlgebraic("e4")))
+
+        // Advance coroutines so delay(450) and bot calculation complete
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Turn is White again after bot responds
+        assertEquals(PieceColor.WHITE, viewModel.uiState.value.sideToMove)
+        assertTrue(viewModel.uiState.value.canUndo)
+
+        // Undo against bot reverts 2 moves back to start
+        viewModel.onEvent(ChessUiEvent.UndoClicked)
+        val stateAfterUndo = viewModel.uiState.value
+        assertEquals(PieceColor.WHITE, stateAfterUndo.sideToMove)
+        assertFalse(stateAfterUndo.canUndo)
+        assertNull(stateAfterUndo.lastMoveFrom)
     }
 }

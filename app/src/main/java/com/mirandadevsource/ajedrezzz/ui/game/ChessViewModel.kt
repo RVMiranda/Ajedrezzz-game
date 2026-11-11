@@ -1,19 +1,27 @@
 package com.mirandadevsource.ajedrezzz.ui.game
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.mirandadevsource.ajedrezzz.domain.ai.BotDifficulty
 import com.mirandadevsource.ajedrezzz.domain.engine.ChessEngineBridge
 import com.mirandadevsource.ajedrezzz.domain.model.GameStatus
 import com.mirandadevsource.ajedrezzz.domain.model.MoveResult
 import com.mirandadevsource.ajedrezzz.domain.model.Piece
 import com.mirandadevsource.ajedrezzz.domain.model.PieceColor
 import com.mirandadevsource.ajedrezzz.domain.model.Position
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ChessViewModel(
-    private val bridge: ChessEngineBridge = ChessEngineBridge()
+    private val bridge: ChessEngineBridge = ChessEngineBridge(),
+    private val botDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(createInitialState())
@@ -27,6 +35,8 @@ class ChessViewModel(
             sideToMove = bridge.sideToMove,
             gameStatus = bridge.getGameStatus(),
             gameMode = GameMode.PASS_AND_PLAY,
+            botDifficulty = BotDifficulty.EASY,
+            isBotThinking = false,
             isFlipped = false,
             isAutoFlipEnabled = false,
             canUndo = bridge.canUndo,
@@ -46,6 +56,7 @@ class ChessViewModel(
             is ChessUiEvent.ToggleAutoFlipClicked -> handleToggleAutoFlip()
             is ChessUiEvent.ToggleThreatsClicked -> handleToggleThreats()
             is ChessUiEvent.ChangeGameMode -> handleChangeGameMode(event.mode)
+            is ChessUiEvent.ChangeBotDifficulty -> handleChangeBotDifficulty(event.difficulty)
         }
     }
 
@@ -64,7 +75,7 @@ class ChessViewModel(
 
     private fun handleSquareClick(position: Position) {
         val currentState = _uiState.value
-        if (currentState.gameStatus.isGameOver) return
+        if (currentState.gameStatus.isGameOver || currentState.isBotThinking) return
 
         val selected = currentState.selectedPosition
         val pieceAtClicked = bridge.getPieceAt(position)
@@ -157,36 +168,78 @@ class ChessViewModel(
                     isFlipped = newIsFlipped
                 )
             }
+
+            // Si estamos jugando contra el bot y es turno de Negras, se lanza el cálculo
+            if (_uiState.value.gameMode == GameMode.VS_BOT &&
+                newSideToMove == PieceColor.BLACK &&
+                !newGameStatus.isGameOver
+            ) {
+                triggerBotMove()
+            }
         } else {
             clearSelection()
         }
     }
 
-    private fun handleUndo() {
-        if (!bridge.canUndo) return
-        val undone = bridge.undoMove()
-        if (undone) {
-            val status = bridge.getGameStatus()
-            val side = bridge.sideToMove
-            val (whiteAdv, blackAdv) = bridge.getMaterialAdvantage()
-            val shouldAutoFlip = _uiState.value.isAutoFlipEnabled &&
-                    _uiState.value.gameMode == GameMode.PASS_AND_PLAY
-
-            _uiState.update { state ->
-                state.copy(
-                    squares = bridge.getAllSquares(showThreats = state.showThreats),
-                    selectedPosition = null,
-                    sideToMove = side,
-                    gameStatus = status,
-                    canUndo = bridge.canUndo,
-                    statusMessage = getStatusText(status, side),
-                    whiteMaterialAdvantage = whiteAdv,
-                    blackMaterialAdvantage = blackAdv,
-                    lastMoveFrom = null,
-                    lastMoveTo = null,
-                    isFlipped = if (shouldAutoFlip) side == PieceColor.BLACK else state.isFlipped
+    private fun triggerBotMove() {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isBotThinking = true,
+                    statusMessage = "El dispositivo está pensando..."
                 )
             }
+
+            // Retardo pedagógico para una respuesta humana y natural
+            delay(450)
+
+            val difficulty = _uiState.value.botDifficulty
+            val botMove = withContext(botDispatcher) {
+                bridge.findBestBotMove(difficulty)
+            }
+
+            _uiState.update { it.copy(isBotThinking = false) }
+
+            if (botMove != null &&
+                _uiState.value.gameMode == GameMode.VS_BOT &&
+                !_uiState.value.gameStatus.isGameOver
+            ) {
+                executeMove(botMove.first, botMove.second)
+            }
+        }
+    }
+
+    private fun handleUndo() {
+        if (!bridge.canUndo || _uiState.value.isBotThinking) return
+
+        if (_uiState.value.gameMode == GameMode.VS_BOT && bridge.sideToMove == PieceColor.WHITE) {
+            // Contra el bot, revertir 2 jugadas para volver al turno del jugador
+            bridge.undoMove()
+            bridge.undoMove()
+        } else {
+            bridge.undoMove()
+        }
+
+        val status = bridge.getGameStatus()
+        val side = bridge.sideToMove
+        val (whiteAdv, blackAdv) = bridge.getMaterialAdvantage()
+        val shouldAutoFlip = _uiState.value.isAutoFlipEnabled &&
+                _uiState.value.gameMode == GameMode.PASS_AND_PLAY
+
+        _uiState.update { state ->
+            state.copy(
+                squares = bridge.getAllSquares(showThreats = state.showThreats),
+                selectedPosition = null,
+                sideToMove = side,
+                gameStatus = status,
+                canUndo = bridge.canUndo,
+                statusMessage = getStatusText(status, side),
+                whiteMaterialAdvantage = whiteAdv,
+                blackMaterialAdvantage = blackAdv,
+                lastMoveFrom = null,
+                lastMoveTo = null,
+                isFlipped = if (shouldAutoFlip) side == PieceColor.BLACK else state.isFlipped
+            )
         }
     }
 
@@ -194,6 +247,7 @@ class ChessViewModel(
         bridge.reset()
         _uiState.value = createInitialState().copy(
             gameMode = _uiState.value.gameMode,
+            botDifficulty = _uiState.value.botDifficulty,
             isFlipped = _uiState.value.isFlipped,
             isAutoFlipEnabled = _uiState.value.isAutoFlipEnabled,
             showThreats = _uiState.value.showThreats
@@ -220,7 +274,17 @@ class ChessViewModel(
     }
 
     private fun handleChangeGameMode(mode: GameMode) {
-        _uiState.update { it.copy(gameMode = mode) }
+        _uiState.update {
+            it.copy(
+                gameMode = mode,
+                isFlipped = if (mode == GameMode.VS_BOT) false else it.isFlipped,
+                isAutoFlipEnabled = if (mode == GameMode.VS_BOT) false else it.isAutoFlipEnabled
+            )
+        }
+    }
+
+    private fun handleChangeBotDifficulty(difficulty: BotDifficulty) {
+        _uiState.update { it.copy(botDifficulty = difficulty) }
     }
 
     private fun clearSelection() {

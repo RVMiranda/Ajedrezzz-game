@@ -1,5 +1,6 @@
 package com.mirandadevsource.ajedrezzz.ui.game
 
+import com.mirandadevsource.ajedrezzz.domain.ai.BotDifficulty
 import com.mirandadevsource.ajedrezzz.domain.model.GameStatus
 import com.mirandadevsource.ajedrezzz.domain.model.Piece
 import com.mirandadevsource.ajedrezzz.domain.model.PieceColor
@@ -8,7 +9,7 @@ import com.mirandadevsource.ajedrezzz.domain.model.SquareUiModel
 
 enum class GameMode {
     PASS_AND_PLAY, // 2 jugadores en el mismo dispositivo
-    VS_BOT         // Contra el dispositivo (próxima fase)
+    VS_BOT         // Contra el dispositivo
 }
 
 data class ChessUiState(
@@ -17,6 +18,8 @@ data class ChessUiState(
     val sideToMove: PieceColor = PieceColor.WHITE,
     val gameStatus: GameStatus = GameStatus.IN_PROGRESS,
     val gameMode: GameMode = GameMode.PASS_AND_PLAY,
+    val botDifficulty: BotDifficulty = BotDifficulty.EASY,
+    val isBotThinking: Boolean = false,
     val isFlipped: Boolean = false,
     val isAutoFlipEnabled: Boolean = false,
     val canUndo: Boolean = false,
@@ -38,4 +41,5 @@ sealed class ChessUiEvent {
     data object ToggleAutoFlipClicked : ChessUiEvent()
     data object ToggleThreatsClicked : ChessUiEvent()
     data class ChangeGameMode(val mode: GameMode) : ChessUiEvent()
+    data class ChangeBotDifficulty(val difficulty: BotDifficulty) : ChessUiEvent()
 }
