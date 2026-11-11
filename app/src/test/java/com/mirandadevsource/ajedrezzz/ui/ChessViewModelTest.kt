@@ -1,8 +1,10 @@
 package com.mirandadevsource.ajedrezzz.ui
 
 import com.mirandadevsource.ajedrezzz.domain.ai.BotDifficulty
+import com.mirandadevsource.ajedrezzz.domain.engine.ChessEngineBridge
 import com.mirandadevsource.ajedrezzz.domain.model.GameStatus
 import com.mirandadevsource.ajedrezzz.domain.model.PieceColor
+import com.mirandadevsource.ajedrezzz.domain.model.PieceType
 import com.mirandadevsource.ajedrezzz.domain.model.Position
 import com.mirandadevsource.ajedrezzz.ui.game.ChessUiEvent
 import com.mirandadevsource.ajedrezzz.ui.game.ChessViewModel
@@ -259,5 +261,31 @@ class ChessViewModelTest {
         assertEquals(PieceColor.WHITE, stateAfterUndo.sideToMove)
         assertFalse(stateAfterUndo.canUndo)
         assertNull(stateAfterUndo.lastMoveFrom)
+    }
+
+    @Test
+    fun `pawn promotion triggers pendingPromotion and promotes on selection`() {
+        val bridge = ChessEngineBridge()
+        bridge.loadFen("8/4P3/8/8/8/8/8/4K2k w - - 0 1")
+        val vm = ChessViewModel(bridge = bridge, botDispatcher = testDispatcher)
+
+        val e7 = Position.fromAlgebraic("e7")
+        val e8 = Position.fromAlgebraic("e8")
+
+        vm.onEvent(ChessUiEvent.SquareClicked(e7))
+        vm.onEvent(ChessUiEvent.SquareClicked(e8))
+
+        // Should be waiting for promotion selection
+        assertEquals(Pair(e7, e8), vm.uiState.value.pendingPromotion)
+
+        // Select Queen
+        vm.onEvent(ChessUiEvent.PromotionSelected(PieceType.QUEEN))
+
+        // Promotion complete
+        assertNull(vm.uiState.value.pendingPromotion)
+        val e8Square = vm.uiState.value.squares.first { it.position == e8 }
+        assertEquals(PieceType.QUEEN, e8Square.piece?.type)
+        assertEquals(PieceColor.WHITE, e8Square.piece?.color)
+        assertEquals("e8=D", vm.uiState.value.moveHistory.first().whiteMove)
     }
 }

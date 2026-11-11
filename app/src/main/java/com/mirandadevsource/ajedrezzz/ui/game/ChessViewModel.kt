@@ -5,9 +5,12 @@ import androidx.lifecycle.viewModelScope
 import com.mirandadevsource.ajedrezzz.domain.ai.BotDifficulty
 import com.mirandadevsource.ajedrezzz.domain.engine.ChessEngineBridge
 import com.mirandadevsource.ajedrezzz.domain.model.GameStatus
+import com.mirandadevsource.ajedrezzz.domain.model.MoveLogItem
+import com.mirandadevsource.ajedrezzz.domain.model.MoveNotationHelper
 import com.mirandadevsource.ajedrezzz.domain.model.MoveResult
 import com.mirandadevsource.ajedrezzz.domain.model.Piece
 import com.mirandadevsource.ajedrezzz.domain.model.PieceColor
+import com.mirandadevsource.ajedrezzz.domain.model.PieceType
 import com.mirandadevsource.ajedrezzz.domain.model.Position
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +46,8 @@ class ChessViewModel(
             showThreats = false,
             whiteMaterialAdvantage = whiteAdv,
             blackMaterialAdvantage = blackAdv,
+            pendingPromotion = null,
+            moveHistory = emptyList(),
             statusMessage = getStatusText(bridge.getGameStatus(), bridge.sideToMove)
         )
     }
@@ -50,6 +55,8 @@ class ChessViewModel(
     fun onEvent(event: ChessUiEvent) {
         when (event) {
             is ChessUiEvent.SquareClicked -> handleSquareClick(event.position)
+            is ChessUiEvent.PromotionSelected -> handlePromotionSelected(event.pieceType)
+            is ChessUiEvent.PromotionDismissed -> handlePromotionDismissed()
             is ChessUiEvent.UndoClicked -> handleUndo()
             is ChessUiEvent.ResetGameClicked -> handleReset()
             is ChessUiEvent.ToggleFlipClicked -> handleToggleFlip()
@@ -113,7 +120,12 @@ class ChessViewModel(
                 // Click en casilla destino: verificar si es legal
                 val legalDestinations = bridge.getLegalMovesFrom(selected)
                 if (legalDestinations.contains(position)) {
-                    executeMove(from = selected, to = position)
+                    // Verificar si es promoción de peón
+                    if (bridge.isPromotion(selected, position)) {
+                        _uiState.update { it.copy(pendingPromotion = Pair(selected, position)) }
+                    } else {
+                        executeMove(from = selected, to = position)
+                    }
                 } else {
                     // Click en casilla no permitida: deseleccionar
                     clearSelection()
@@ -122,10 +134,30 @@ class ChessViewModel(
         }
     }
 
-    private fun executeMove(from: Position, to: Position) {
+    private fun handlePromotionSelected(pieceType: PieceType) {
+        val pending = _uiState.value.pendingPromotion ?: return
+        executeMove(
+            from = pending.first,
+            to = pending.second,
+            promotionPieceType = pieceType
+        )
+    }
+
+    private fun handlePromotionDismissed() {
+        clearSelection()
+        _uiState.update { it.copy(pendingPromotion = null) }
+    }
+
+    private fun executeMove(
+        from: Position,
+        to: Position,
+        promotionPieceType: PieceType = PieceType.QUEEN
+    ) {
+        val movingPiece = bridge.getPieceAt(from) ?: return
         val captured = bridge.getPieceAt(to)
         val movingColor = bridge.sideToMove
-        val result = bridge.makeMove(from, to)
+        val isPromo = bridge.isPromotion(from, to)
+        val result = bridge.makeMove(from, to, promotionPieceType)
 
         if (result is MoveResult.Success) {
             val newCapturedWhite = _uiState.value.capturedByWhite.toMutableList()
@@ -151,10 +183,27 @@ class ChessViewModel(
                 _uiState.value.isFlipped
             }
 
+            val moveNotation = MoveNotationHelper.formatMove(
+                piece = movingPiece,
+                from = from,
+                to = to,
+                isCapture = captured != null,
+                isCheck = newGameStatus == GameStatus.CHECK,
+                isCheckmate = newGameStatus == GameStatus.CHECKMATE,
+                promotionPiece = if (isPromo) promotionPieceType else null
+            )
+
+            val updatedHistory = updateMoveHistory(
+                _uiState.value.moveHistory,
+                movingColor,
+                moveNotation
+            )
+
             _uiState.update { state ->
                 state.copy(
                     squares = bridge.getAllSquares(showThreats = state.showThreats),
                     selectedPosition = null,
+                    pendingPromotion = null,
                     sideToMove = newSideToMove,
                     gameStatus = newGameStatus,
                     canUndo = bridge.canUndo,
@@ -163,6 +212,7 @@ class ChessViewModel(
                     capturedByBlack = newCapturedBlack,
                     whiteMaterialAdvantage = whiteAdv,
                     blackMaterialAdvantage = blackAdv,
+                    moveHistory = updatedHistory,
                     lastMoveFrom = from,
                     lastMoveTo = to,
                     isFlipped = newIsFlipped
@@ -179,6 +229,40 @@ class ChessViewModel(
         } else {
             clearSelection()
         }
+    }
+
+    private fun updateMoveHistory(
+        current: List<MoveLogItem>,
+        color: PieceColor,
+        notation: String
+    ): List<MoveLogItem> {
+        val list = current.toMutableList()
+        if (color == PieceColor.WHITE) {
+            list.add(MoveLogItem(moveNumber = list.size + 1, whiteMove = notation))
+        } else {
+            if (list.isNotEmpty()) {
+                val last = list.removeAt(list.size - 1)
+                list.add(last.copy(blackMove = notation))
+            } else {
+                list.add(MoveLogItem(moveNumber = 1, whiteMove = "-", blackMove = notation))
+            }
+        }
+        return list
+    }
+
+    private fun rollbackMoveHistory(current: List<MoveLogItem>, count: Int): List<MoveLogItem> {
+        val list = current.toMutableList()
+        repeat(count) {
+            if (list.isNotEmpty()) {
+                val last = list.last()
+                if (last.blackMove != null) {
+                    list[list.size - 1] = last.copy(blackMove = null)
+                } else {
+                    list.removeAt(list.size - 1)
+                }
+            }
+        }
+        return list
     }
 
     private fun triggerBotMove() {
@@ -212,12 +296,13 @@ class ChessViewModel(
     private fun handleUndo() {
         if (!bridge.canUndo || _uiState.value.isBotThinking) return
 
-        if (_uiState.value.gameMode == GameMode.VS_BOT && bridge.sideToMove == PieceColor.WHITE) {
-            // Contra el bot, revertir 2 jugadas para volver al turno del jugador
+        val movesToUndoCount = if (_uiState.value.gameMode == GameMode.VS_BOT && bridge.sideToMove == PieceColor.WHITE) {
             bridge.undoMove()
             bridge.undoMove()
+            2
         } else {
             bridge.undoMove()
+            1
         }
 
         val status = bridge.getGameStatus()
@@ -226,16 +311,20 @@ class ChessViewModel(
         val shouldAutoFlip = _uiState.value.isAutoFlipEnabled &&
                 _uiState.value.gameMode == GameMode.PASS_AND_PLAY
 
+        val updatedHistory = rollbackMoveHistory(_uiState.value.moveHistory, movesToUndoCount)
+
         _uiState.update { state ->
             state.copy(
                 squares = bridge.getAllSquares(showThreats = state.showThreats),
                 selectedPosition = null,
+                pendingPromotion = null,
                 sideToMove = side,
                 gameStatus = status,
                 canUndo = bridge.canUndo,
                 statusMessage = getStatusText(status, side),
                 whiteMaterialAdvantage = whiteAdv,
                 blackMaterialAdvantage = blackAdv,
+                moveHistory = updatedHistory,
                 lastMoveFrom = null,
                 lastMoveTo = null,
                 isFlipped = if (shouldAutoFlip) side == PieceColor.BLACK else state.isFlipped

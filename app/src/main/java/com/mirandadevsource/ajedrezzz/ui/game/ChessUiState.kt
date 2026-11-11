@@ -2,8 +2,10 @@ package com.mirandadevsource.ajedrezzz.ui.game
 
 import com.mirandadevsource.ajedrezzz.domain.ai.BotDifficulty
 import com.mirandadevsource.ajedrezzz.domain.model.GameStatus
+import com.mirandadevsource.ajedrezzz.domain.model.MoveLogItem
 import com.mirandadevsource.ajedrezzz.domain.model.Piece
 import com.mirandadevsource.ajedrezzz.domain.model.PieceColor
+import com.mirandadevsource.ajedrezzz.domain.model.PieceType
 import com.mirandadevsource.ajedrezzz.domain.model.Position
 import com.mirandadevsource.ajedrezzz.domain.model.SquareUiModel
 
@@ -30,11 +32,15 @@ data class ChessUiState(
     val lastMoveTo: Position? = null,
     val showThreats: Boolean = false,
     val whiteMaterialAdvantage: Int = 0,
-    val blackMaterialAdvantage: Int = 0
+    val blackMaterialAdvantage: Int = 0,
+    val pendingPromotion: Pair<Position, Position>? = null,
+    val moveHistory: List<MoveLogItem> = emptyList()
 )
 
 sealed class ChessUiEvent {
     data class SquareClicked(val position: Position) : ChessUiEvent()
+    data class PromotionSelected(val pieceType: PieceType) : ChessUiEvent()
+    data object PromotionDismissed : ChessUiEvent()
     data object UndoClicked : ChessUiEvent()
     data object ResetGameClicked : ChessUiEvent()
     data object ToggleFlipClicked : ChessUiEvent()

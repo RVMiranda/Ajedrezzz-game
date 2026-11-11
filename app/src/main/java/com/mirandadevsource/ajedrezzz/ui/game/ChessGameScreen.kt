@@ -49,6 +49,8 @@ import com.mirandadevsource.ajedrezzz.domain.model.GameStatus
 import com.mirandadevsource.ajedrezzz.domain.model.PieceColor
 import com.mirandadevsource.ajedrezzz.ui.game.components.CapturedPiecesBar
 import com.mirandadevsource.ajedrezzz.ui.game.components.ChessBoard
+import com.mirandadevsource.ajedrezzz.ui.game.components.MoveHistoryBar
+import com.mirandadevsource.ajedrezzz.ui.game.components.PromotionDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -218,7 +220,13 @@ fun ChessGameScreen(
                 modifier = Modifier.padding(vertical = 2.dp)
             )
 
-            // 6. Barra de Controles Inferiores (Deshacer, Girar, Auto-Giro, Reiniciar)
+            // 6. Cinta de Historial de Jugadas (Notación Algebraica)
+            MoveHistoryBar(
+                history = state.moveHistory,
+                modifier = Modifier.padding(vertical = 2.dp)
+            )
+
+            // 7. Barra de Controles Inferiores (Deshacer, Girar, Auto-Giro, Reiniciar)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -273,6 +281,19 @@ fun ChessGameScreen(
                 }
             }
         }
+    }
+
+    // Diálogo de Coronación / Promoción de Peón
+    if (state.pendingPromotion != null) {
+        PromotionDialog(
+            color = state.sideToMove,
+            onPieceSelected = { pieceType ->
+                viewModel.onEvent(ChessUiEvent.PromotionSelected(pieceType))
+            },
+            onDismiss = {
+                viewModel.onEvent(ChessUiEvent.PromotionDismissed)
+            }
+        )
     }
 
     // Diálogo de Confirmación de Reinicio
