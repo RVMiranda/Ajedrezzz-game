@@ -1,0 +1,38 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="45dp"
+    android:height="45dp"
+    android:viewportWidth="45"
+    android:viewportHeight="45">
+    <!-- Base bottom -->
+    <path
+        android:pathData="M 9,39 L 36,39 L 36,36 L 9,36 L 9,39 z"
+        android:fillColor="#333333"
+        android:strokeColor="#000000"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <!-- Horse head and neck -->
+    <path
+        android:pathData="M 12,36 C 11.5,32 10,29 13,25 C 12,24 11,21 13,17 C 14,15 14,14 13.5,12 C 15,12 17,13 18,14 C 20,11 23.5,9.5 28,10 C 28,10 30,12 30,14 C 33,14 35,16 34,20 C 33,23 30,24 30,24 C 32,28 33,32 33,36 L 12,36 z"
+        android:fillColor="#333333"
+        android:strokeColor="#000000"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <!-- Eye -->
+    <path
+        android:pathData="M 28,15 A 1.5,1.5 0 1,1 25,15 A 1.5,1.5 0 1,1 28,15 z"
+        android:fillColor="#FFFFFF" />
+    <!-- Mane details -->
+    <path
+        android:pathData="M 20,16 C 22,17 24,19 25,23"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round" />
+    <!-- Nostril -->
+    <path
+        android:pathData="M 14,20 L 15,21"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round" />
+</vector>
