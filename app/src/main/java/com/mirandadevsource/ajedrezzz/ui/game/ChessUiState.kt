@@ -1,0 +1,37 @@
+package com.mirandadevsource.ajedrezzz.ui.game
+
+import com.mirandadevsource.ajedrezzz.domain.model.GameStatus
+import com.mirandadevsource.ajedrezzz.domain.model.Piece
+import com.mirandadevsource.ajedrezzz.domain.model.PieceColor
+import com.mirandadevsource.ajedrezzz.domain.model.Position
+import com.mirandadevsource.ajedrezzz.domain.model.SquareUiModel
+
+enum class GameMode {
+    PASS_AND_PLAY, // 2 jugadores en el mismo dispositivo
+    VS_BOT         // Contra el dispositivo (próxima fase)
+}
+
+data class ChessUiState(
+    val squares: List<SquareUiModel> = emptyList(),
+    val selectedPosition: Position? = null,
+    val sideToMove: PieceColor = PieceColor.WHITE,
+    val gameStatus: GameStatus = GameStatus.IN_PROGRESS,
+    val gameMode: GameMode = GameMode.PASS_AND_PLAY,
+    val isFlipped: Boolean = false,
+    val isAutoFlipEnabled: Boolean = false,
+    val canUndo: Boolean = false,
+    val statusMessage: String = "Turno de las Blancas",
+    val capturedByWhite: List<Piece> = emptyList(),
+    val capturedByBlack: List<Piece> = emptyList(),
+    val lastMoveFrom: Position? = null,
+    val lastMoveTo: Position? = null
+)
+
+sealed class ChessUiEvent {
+    data class SquareClicked(val position: Position) : ChessUiEvent()
+    data object UndoClicked : ChessUiEvent()
+    data object ResetGameClicked : ChessUiEvent()
+    data object ToggleFlipClicked : ChessUiEvent()
+    data object ToggleAutoFlipClicked : ChessUiEvent()
+    data class ChangeGameMode(val mode: GameMode) : ChessUiEvent()
+}
