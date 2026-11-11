@@ -3,13 +3,13 @@ package com.mirandadevsource.ajedrezzz.domain.model
 import androidx.annotation.DrawableRes
 import com.mirandadevsource.ajedrezzz.R
 
-enum class PieceType {
-    PAWN,
-    KNIGHT,
-    BISHOP,
-    ROOK,
-    QUEEN,
-    KING
+enum class PieceType(val materialValue: Int) {
+    PAWN(1),
+    KNIGHT(3),
+    BISHOP(3),
+    ROOK(5),
+    QUEEN(9),
+    KING(0)
 }
 
 enum class PieceColor {

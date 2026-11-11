@@ -20,6 +20,7 @@ class ChessViewModel(
     val uiState: StateFlow<ChessUiState> = _uiState.asStateFlow()
 
     private fun createInitialState(): ChessUiState {
+        val (whiteAdv, blackAdv) = bridge.getMaterialAdvantage()
         return ChessUiState(
             squares = bridge.getAllSquares(),
             selectedPosition = null,
@@ -29,6 +30,9 @@ class ChessViewModel(
             isFlipped = false,
             isAutoFlipEnabled = false,
             canUndo = bridge.canUndo,
+            showThreats = false,
+            whiteMaterialAdvantage = whiteAdv,
+            blackMaterialAdvantage = blackAdv,
             statusMessage = getStatusText(bridge.getGameStatus(), bridge.sideToMove)
         )
     }
@@ -40,7 +44,21 @@ class ChessViewModel(
             is ChessUiEvent.ResetGameClicked -> handleReset()
             is ChessUiEvent.ToggleFlipClicked -> handleToggleFlip()
             is ChessUiEvent.ToggleAutoFlipClicked -> handleToggleAutoFlip()
+            is ChessUiEvent.ToggleThreatsClicked -> handleToggleThreats()
             is ChessUiEvent.ChangeGameMode -> handleChangeGameMode(event.mode)
+        }
+    }
+
+    private fun handleToggleThreats() {
+        _uiState.update { state ->
+            val nextThreats = !state.showThreats
+            state.copy(
+                showThreats = nextThreats,
+                squares = bridge.getAllSquares(
+                    selectedPosition = state.selectedPosition,
+                    showThreats = nextThreats
+                )
+            )
         }
     }
 
@@ -57,7 +75,10 @@ class ChessViewModel(
                 _uiState.update { state ->
                     state.copy(
                         selectedPosition = position,
-                        squares = bridge.getAllSquares(selectedPosition = position)
+                        squares = bridge.getAllSquares(
+                            selectedPosition = position,
+                            showThreats = state.showThreats
+                        )
                     )
                 }
             }
@@ -71,7 +92,10 @@ class ChessViewModel(
                 _uiState.update { state ->
                     state.copy(
                         selectedPosition = position,
-                        squares = bridge.getAllSquares(selectedPosition = position)
+                        squares = bridge.getAllSquares(
+                            selectedPosition = position,
+                            showThreats = state.showThreats
+                        )
                     )
                 }
             } else {
@@ -106,6 +130,7 @@ class ChessViewModel(
 
             val newGameStatus = bridge.getGameStatus()
             val newSideToMove = bridge.sideToMove
+            val (whiteAdv, blackAdv) = bridge.getMaterialAdvantage()
             val shouldAutoFlip = _uiState.value.isAutoFlipEnabled &&
                     _uiState.value.gameMode == GameMode.PASS_AND_PLAY
 
@@ -117,7 +142,7 @@ class ChessViewModel(
 
             _uiState.update { state ->
                 state.copy(
-                    squares = bridge.getAllSquares(),
+                    squares = bridge.getAllSquares(showThreats = state.showThreats),
                     selectedPosition = null,
                     sideToMove = newSideToMove,
                     gameStatus = newGameStatus,
@@ -125,6 +150,8 @@ class ChessViewModel(
                     statusMessage = getStatusText(newGameStatus, newSideToMove),
                     capturedByWhite = newCapturedWhite,
                     capturedByBlack = newCapturedBlack,
+                    whiteMaterialAdvantage = whiteAdv,
+                    blackMaterialAdvantage = blackAdv,
                     lastMoveFrom = from,
                     lastMoveTo = to,
                     isFlipped = newIsFlipped
@@ -141,17 +168,20 @@ class ChessViewModel(
         if (undone) {
             val status = bridge.getGameStatus()
             val side = bridge.sideToMove
+            val (whiteAdv, blackAdv) = bridge.getMaterialAdvantage()
             val shouldAutoFlip = _uiState.value.isAutoFlipEnabled &&
                     _uiState.value.gameMode == GameMode.PASS_AND_PLAY
 
             _uiState.update { state ->
                 state.copy(
-                    squares = bridge.getAllSquares(),
+                    squares = bridge.getAllSquares(showThreats = state.showThreats),
                     selectedPosition = null,
                     sideToMove = side,
                     gameStatus = status,
                     canUndo = bridge.canUndo,
                     statusMessage = getStatusText(status, side),
+                    whiteMaterialAdvantage = whiteAdv,
+                    blackMaterialAdvantage = blackAdv,
                     lastMoveFrom = null,
                     lastMoveTo = null,
                     isFlipped = if (shouldAutoFlip) side == PieceColor.BLACK else state.isFlipped
@@ -165,7 +195,8 @@ class ChessViewModel(
         _uiState.value = createInitialState().copy(
             gameMode = _uiState.value.gameMode,
             isFlipped = _uiState.value.isFlipped,
-            isAutoFlipEnabled = _uiState.value.isAutoFlipEnabled
+            isAutoFlipEnabled = _uiState.value.isAutoFlipEnabled,
+            showThreats = _uiState.value.showThreats
         )
     }
 
@@ -196,7 +227,10 @@ class ChessViewModel(
         _uiState.update { state ->
             state.copy(
                 selectedPosition = null,
-                squares = bridge.getAllSquares(selectedPosition = null)
+                squares = bridge.getAllSquares(
+                    selectedPosition = null,
+                    showThreats = state.showThreats
+                )
             )
         }
     }

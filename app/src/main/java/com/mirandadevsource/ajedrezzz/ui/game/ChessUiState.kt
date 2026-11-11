@@ -24,7 +24,10 @@ data class ChessUiState(
     val capturedByWhite: List<Piece> = emptyList(),
     val capturedByBlack: List<Piece> = emptyList(),
     val lastMoveFrom: Position? = null,
-    val lastMoveTo: Position? = null
+    val lastMoveTo: Position? = null,
+    val showThreats: Boolean = false,
+    val whiteMaterialAdvantage: Int = 0,
+    val blackMaterialAdvantage: Int = 0
 )
 
 sealed class ChessUiEvent {
@@ -33,5 +36,6 @@ sealed class ChessUiEvent {
     data object ResetGameClicked : ChessUiEvent()
     data object ToggleFlipClicked : ChessUiEvent()
     data object ToggleAutoFlipClicked : ChessUiEvent()
+    data object ToggleThreatsClicked : ChessUiEvent()
     data class ChangeGameMode(val mode: GameMode) : ChessUiEvent()
 }

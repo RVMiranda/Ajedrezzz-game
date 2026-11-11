@@ -37,6 +37,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,6 +55,7 @@ fun ChessGameScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val haptic = LocalHapticFeedback.current
     var showResetDialog by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -83,6 +86,14 @@ fun ChessGameScreen(
                             )
                         }
                     }
+                },
+                actions = {
+                    FilterChip(
+                        selected = state.showThreats,
+                        onClick = { viewModel.onEvent(ChessUiEvent.ToggleThreatsClicked) },
+                        label = { Text("Tutor") },
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
@@ -138,28 +149,45 @@ fun ChessGameScreen(
                 }
             }
 
+            if (state.showThreats) {
+                Text(
+                    text = "Modo Tutor activo: piezas amenazadas marcadas en naranja",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(vertical = 1.dp)
+                )
+            }
+
             // 2. Bandeja de Piezas Capturadas Superior (del bando opuesto según perspectiva)
             val topCaptures = if (state.isFlipped) state.capturedByBlack else state.capturedByWhite
             val topLabel = if (state.isFlipped) "Capturas Negras:" else "Capturas Blancas:"
+            val topAdvantage = if (state.isFlipped) state.blackMaterialAdvantage else state.whiteMaterialAdvantage
             CapturedPiecesBar(
                 pieces = topCaptures,
                 label = topLabel,
+                materialAdvantage = topAdvantage,
                 modifier = Modifier.padding(vertical = 2.dp)
             )
 
             // 3. Tablero 8x8 Central
             ChessBoard(
                 state = state,
-                onSquareClick = { pos -> viewModel.onEvent(ChessUiEvent.SquareClicked(pos)) },
+                onSquareClick = { pos ->
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    viewModel.onEvent(ChessUiEvent.SquareClicked(pos))
+                },
                 modifier = Modifier.padding(vertical = 4.dp)
             )
 
             // 4. Bandeja de Piezas Capturadas Inferior
             val bottomCaptures = if (state.isFlipped) state.capturedByWhite else state.capturedByBlack
             val bottomLabel = if (state.isFlipped) "Capturas Blancas:" else "Capturas Negras:"
+            val bottomAdvantage = if (state.isFlipped) state.whiteMaterialAdvantage else state.blackMaterialAdvantage
             CapturedPiecesBar(
                 pieces = bottomCaptures,
                 label = bottomLabel,
+                materialAdvantage = bottomAdvantage,
                 modifier = Modifier.padding(vertical = 2.dp)
             )
 

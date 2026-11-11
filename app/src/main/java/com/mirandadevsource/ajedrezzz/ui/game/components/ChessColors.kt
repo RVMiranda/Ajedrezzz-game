@@ -21,6 +21,11 @@ object ChessColors {
 
     // Alerta de Rey en Jaque
     val CheckHighlight = Color(0xB3EB5757)
+    val CheckBorder = Color(0xFFD32F2F)
+
+    // Alerta pedagógica: Pieza bajo ataque / amenazada (Modo Tutor)
+    val ThreatenedHighlight = Color(0x55FF9800)
+    val ThreatenedBorder = Color(0xFFE65100)
 
     // Letras y números de coordenadas
     val CoordinateTextDark = Color(0xFF769656)

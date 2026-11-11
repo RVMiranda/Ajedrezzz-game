@@ -151,6 +151,32 @@ class ChessEngineBridge(private val board: Board = Board()) {
         return threatened
     }
 
+    /**
+     * Calcula la ventaja de material para ambos bandos.
+     * @return Pair(ventajaBlancas, ventajaNegras).
+     * Por ejemplo, si las blancas tienen 3 puntos más, retorna Pair(3, 0).
+     */
+    fun getMaterialAdvantage(): Pair<Int, Int> {
+        var whiteMaterial = 0
+        var blackMaterial = 0
+        for (file in 0..7) {
+            for (rank in 0..7) {
+                val piece = getPieceAt(Position(file, rank)) ?: continue
+                if (piece.color == PieceColor.WHITE) {
+                    whiteMaterial += piece.type.materialValue
+                } else {
+                    blackMaterial += piece.type.materialValue
+                }
+            }
+        }
+        val diff = whiteMaterial - blackMaterial
+        return when {
+            diff > 0 -> Pair(diff, 0)
+            diff < 0 -> Pair(0, -diff)
+            else -> Pair(0, 0)
+        }
+    }
+
     fun getAllSquares(
         selectedPosition: Position? = null,
         showThreats: Boolean = false

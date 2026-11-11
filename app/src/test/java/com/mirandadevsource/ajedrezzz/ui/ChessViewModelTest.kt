@@ -161,4 +161,50 @@ class ChessViewModelTest {
         assertFalse(state.canUndo)
         assertNull(state.lastMoveFrom)
     }
+
+    @Test
+    fun `toggle threats enables tutor mode and highlights attacked pieces`() {
+        assertFalse(viewModel.uiState.value.showThreats)
+
+        // 1. e4 d5
+        viewModel.onEvent(ChessUiEvent.SquareClicked(Position.fromAlgebraic("e2")))
+        viewModel.onEvent(ChessUiEvent.SquareClicked(Position.fromAlgebraic("e4")))
+        viewModel.onEvent(ChessUiEvent.SquareClicked(Position.fromAlgebraic("d7")))
+        viewModel.onEvent(ChessUiEvent.SquareClicked(Position.fromAlgebraic("d5")))
+
+        // Turno de Blancas: activamos el Modo Tutor
+        viewModel.onEvent(ChessUiEvent.ToggleThreatsClicked)
+        assertTrue(viewModel.uiState.value.showThreats)
+
+        // El peón blanco en e4 está amenazado por el peón negro de d5
+        val e4Square = viewModel.uiState.value.squares.first { it.position == Position.fromAlgebraic("e4") }
+        assertTrue(e4Square.isThreatened)
+    }
+
+    @Test
+    fun `capturing pieces calculates material advantage correctly and undo reverts it`() {
+        assertEquals(0, viewModel.uiState.value.whiteMaterialAdvantage)
+        assertEquals(0, viewModel.uiState.value.blackMaterialAdvantage)
+
+        // 1. e4 d5
+        viewModel.onEvent(ChessUiEvent.SquareClicked(Position.fromAlgebraic("e2")))
+        viewModel.onEvent(ChessUiEvent.SquareClicked(Position.fromAlgebraic("e4")))
+        viewModel.onEvent(ChessUiEvent.SquareClicked(Position.fromAlgebraic("d7")))
+        viewModel.onEvent(ChessUiEvent.SquareClicked(Position.fromAlgebraic("d5")))
+
+        // 2. exd5 (Blancas capturan peón en d5: peón vale 1 punto)
+        viewModel.onEvent(ChessUiEvent.SquareClicked(Position.fromAlgebraic("e4")))
+        viewModel.onEvent(ChessUiEvent.SquareClicked(Position.fromAlgebraic("d5")))
+
+        val stateAfterCapture = viewModel.uiState.value
+        assertEquals(1, stateAfterCapture.whiteMaterialAdvantage)
+        assertEquals(0, stateAfterCapture.blackMaterialAdvantage)
+        assertEquals(1, stateAfterCapture.capturedByWhite.size)
+
+        // Deshacemos la captura
+        viewModel.onEvent(ChessUiEvent.UndoClicked)
+        val stateAfterUndo = viewModel.uiState.value
+        assertEquals(0, stateAfterUndo.whiteMaterialAdvantage)
+        assertEquals(0, stateAfterUndo.blackMaterialAdvantage)
+    }
 }

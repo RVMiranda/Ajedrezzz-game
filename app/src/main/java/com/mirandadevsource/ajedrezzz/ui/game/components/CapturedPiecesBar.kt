@@ -25,6 +25,7 @@ import com.mirandadevsource.ajedrezzz.domain.model.Piece
 fun CapturedPiecesBar(
     pieces: List<Piece>,
     label: String,
+    materialAdvantage: Int = 0,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -43,6 +44,16 @@ fun CapturedPiecesBar(
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             modifier = Modifier.padding(end = 6.dp)
         )
+
+        if (materialAdvantage > 0) {
+            Text(
+                text = "+$materialAdvantage",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(end = 8.dp)
+            )
+        }
 
         Row(
             horizontalArrangement = Arrangement.spacedBy((-4).dp),

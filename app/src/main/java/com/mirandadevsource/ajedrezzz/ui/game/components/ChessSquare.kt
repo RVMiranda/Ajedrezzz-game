@@ -38,15 +38,23 @@ fun ChessSquare(
 
     val backgroundColor = when {
         square.isCheck -> ChessColors.CheckHighlight
+        square.isThreatened -> ChessColors.ThreatenedHighlight
         square.isSelected -> ChessColors.SelectedSquare
         isLastMove -> ChessColors.LastMoveHighlight
         else -> baseColor
+    }
+
+    val squareBorderModifier = when {
+        square.isCheck -> Modifier.border(2.dp, ChessColors.CheckBorder)
+        square.isThreatened -> Modifier.border(2.dp, ChessColors.ThreatenedBorder)
+        else -> Modifier
     }
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(backgroundColor)
+            .then(squareBorderModifier)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
