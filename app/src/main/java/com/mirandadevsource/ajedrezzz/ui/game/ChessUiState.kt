@@ -9,12 +9,20 @@ import com.mirandadevsource.ajedrezzz.domain.model.PieceType
 import com.mirandadevsource.ajedrezzz.domain.model.Position
 import com.mirandadevsource.ajedrezzz.domain.model.SquareUiModel
 
+enum class AppScreen {
+    MAIN_MENU,
+    GAME
+}
+
 enum class GameMode {
     PASS_AND_PLAY, // 2 jugadores en el mismo dispositivo
     VS_BOT         // Contra el dispositivo
 }
 
 data class ChessUiState(
+    val currentScreen: AppScreen = AppScreen.MAIN_MENU,
+    val hasSuspendedGame: Boolean = false,
+    val showPauseDialog: Boolean = false,
     val squares: List<SquareUiModel> = emptyList(),
     val selectedPosition: Position? = null,
     val sideToMove: PieceColor = PieceColor.WHITE,
@@ -38,6 +46,13 @@ data class ChessUiState(
 )
 
 sealed class ChessUiEvent {
+    data class StartNewGame(val mode: GameMode, val difficulty: BotDifficulty = BotDifficulty.EASY) : ChessUiEvent()
+    data object ResumeSuspendedGame : ChessUiEvent()
+    data object PauseClicked : ChessUiEvent()
+    data object ResumeGameClicked : ChessUiEvent()
+    data object SuspendAndExitClicked : ChessUiEvent()
+    data object ResignGameClicked : ChessUiEvent()
+    data object ReturnToMainMenuClicked : ChessUiEvent()
     data class SquareClicked(val position: Position) : ChessUiEvent()
     data class PromotionSelected(val pieceType: PieceType) : ChessUiEvent()
     data object PromotionDismissed : ChessUiEvent()

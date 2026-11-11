@@ -1,9 +1,11 @@
 package com.mirandadevsource.ajedrezzz.ui.game
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +23,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -44,12 +47,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.mirandadevsource.ajedrezzz.domain.ai.BotDifficulty
 import com.mirandadevsource.ajedrezzz.domain.model.GameStatus
 import com.mirandadevsource.ajedrezzz.domain.model.PieceColor
 import com.mirandadevsource.ajedrezzz.ui.game.components.CapturedPiecesBar
 import com.mirandadevsource.ajedrezzz.ui.game.components.ChessBoard
-import com.mirandadevsource.ajedrezzz.ui.game.components.MoveHistoryBar
+import com.mirandadevsource.ajedrezzz.ui.game.components.MoveHistoryScoresheet
+import com.mirandadevsource.ajedrezzz.ui.game.components.PauseDialog
 import com.mirandadevsource.ajedrezzz.ui.game.components.PromotionDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -62,24 +65,50 @@ fun ChessGameScreen(
     val haptic = LocalHapticFeedback.current
     var showResetDialog by remember { mutableStateOf(false) }
 
+    // Interceptar botón atrás del sistema para abrir o cerrar el menú de pausa
+    BackHandler {
+        if (state.showPauseDialog) {
+            viewModel.onEvent(ChessUiEvent.ResumeGameClicked)
+        } else {
+            viewModel.onEvent(ChessUiEvent.PauseClicked)
+        }
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = "Ajedrezzz",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp
-                    )
+                    Column {
+                        Text(
+                            text = "Ajedrezzz",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+                        Text(
+                            text = when (state.gameMode) {
+                                GameMode.VS_BOT -> "vs Dispositivo (${state.botDifficulty.title})"
+                                GameMode.PASS_AND_PLAY -> "2 Jugadores (Local)"
+                            },
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 },
                 actions = {
                     FilterChip(
                         selected = state.showThreats,
                         onClick = { viewModel.onEvent(ChessUiEvent.ToggleThreatsClicked) },
                         label = { Text("Tutor") },
-                        modifier = Modifier.padding(end = 8.dp)
+                        modifier = Modifier.padding(end = 4.dp)
                     )
+                    FilledTonalButton(
+                        onClick = { viewModel.onEvent(ChessUiEvent.PauseClicked) },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Text("⏸ Pausa", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
@@ -95,37 +124,7 @@ fun ChessGameScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // 1. Selector de Modo de Juego y Dificultad
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                FilterChip(
-                    selected = state.gameMode == GameMode.PASS_AND_PLAY,
-                    onClick = { viewModel.onEvent(ChessUiEvent.ChangeGameMode(GameMode.PASS_AND_PLAY)) },
-                    label = { Text("2 Jugadores", fontSize = 11.sp) }
-                )
-                FilterChip(
-                    selected = state.gameMode == GameMode.VS_BOT,
-                    onClick = { viewModel.onEvent(ChessUiEvent.ChangeGameMode(GameMode.VS_BOT)) },
-                    label = { Text("vs Dispositivo", fontSize = 11.sp) }
-                )
-                if (state.gameMode == GameMode.VS_BOT) {
-                    FilterChip(
-                        selected = state.botDifficulty == BotDifficulty.MEDIUM,
-                        onClick = {
-                            val next = if (state.botDifficulty == BotDifficulty.EASY) BotDifficulty.MEDIUM else BotDifficulty.EASY
-                            viewModel.onEvent(ChessUiEvent.ChangeBotDifficulty(next))
-                        },
-                        label = { Text(state.botDifficulty.title, fontSize = 11.sp) }
-                    )
-                }
-            }
-
-            // 2. Tarjeta de Estado del Turno
+            // 1. Tarjeta de Estado del Turno
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -186,7 +185,7 @@ fun ChessGameScreen(
                 )
             }
 
-            // 3. Bandeja de Piezas Capturadas Superior
+            // 2. Bandeja de Piezas Capturadas Superior
             val topCaptures = if (state.isFlipped) state.capturedByBlack else state.capturedByWhite
             val topLabel = if (state.isFlipped) "Capturas Negras:" else "Capturas Blancas:"
             val topAdvantage = if (state.isFlipped) state.blackMaterialAdvantage else state.whiteMaterialAdvantage
@@ -197,7 +196,7 @@ fun ChessGameScreen(
                 modifier = Modifier.padding(vertical = 2.dp)
             )
 
-            // 4. Tablero 8x8 Central
+            // 3. Tablero 8x8 Central
             ChessBoard(
                 state = state,
                 onSquareClick = { pos ->
@@ -209,7 +208,7 @@ fun ChessGameScreen(
                 modifier = Modifier.padding(vertical = 4.dp)
             )
 
-            // 5. Bandeja de Piezas Capturadas Inferior
+            // 4. Bandeja de Piezas Capturadas Inferior
             val bottomCaptures = if (state.isFlipped) state.capturedByWhite else state.capturedByBlack
             val bottomLabel = if (state.isFlipped) "Capturas Blancas:" else "Capturas Negras:"
             val bottomAdvantage = if (state.isFlipped) state.whiteMaterialAdvantage else state.blackMaterialAdvantage
@@ -220,13 +219,13 @@ fun ChessGameScreen(
                 modifier = Modifier.padding(vertical = 2.dp)
             )
 
-            // 6. Cinta de Historial de Jugadas (Notación Algebraica)
-            MoveHistoryBar(
+            // 5. Planilla Pedagógica de Jugadas en 2 Columnas (Blancas y Negras)
+            MoveHistoryScoresheet(
                 history = state.moveHistory,
                 modifier = Modifier.padding(vertical = 2.dp)
             )
 
-            // 7. Barra de Controles Inferiores (Deshacer, Girar, Auto-Giro, Reiniciar)
+            // 6. Barra de Controles Inferiores (Deshacer, Girar, Auto-Giro)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -275,7 +274,7 @@ fun ChessGameScreen(
                         )
 
                         TextButton(onClick = { showResetDialog = true }) {
-                            Text("Reiniciar Partida")
+                            Text("Reiniciar")
                         }
                     }
                 }
@@ -296,7 +295,18 @@ fun ChessGameScreen(
         )
     }
 
-    // Diálogo de Confirmación de Reinicio
+    // Diálogo de Menú de Pausa
+    if (state.showPauseDialog) {
+        PauseDialog(
+            onResume = { viewModel.onEvent(ChessUiEvent.ResumeGameClicked) },
+            onRestart = { viewModel.onEvent(ChessUiEvent.ResetGameClicked) },
+            onSuspendAndExit = { viewModel.onEvent(ChessUiEvent.SuspendAndExitClicked) },
+            onResign = { viewModel.onEvent(ChessUiEvent.ResignGameClicked) },
+            onDismiss = { viewModel.onEvent(ChessUiEvent.ResumeGameClicked) }
+        )
+    }
+
+    // Diálogo de Confirmación de Reinicio Rápido
     if (showResetDialog) {
         AlertDialog(
             onDismissRequest = { showResetDialog = false },
@@ -329,6 +339,11 @@ fun ChessGameScreen(
             confirmButton = {
                 Button(onClick = { viewModel.onEvent(ChessUiEvent.ResetGameClicked) }) {
                     Text("Jugar otra vez")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.onEvent(ChessUiEvent.ReturnToMainMenuClicked) }) {
+                    Text("Menú Principal")
                 }
             }
         )

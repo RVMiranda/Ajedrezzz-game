@@ -6,6 +6,8 @@ import com.mirandadevsource.ajedrezzz.domain.model.GameStatus
 import com.mirandadevsource.ajedrezzz.domain.model.PieceColor
 import com.mirandadevsource.ajedrezzz.domain.model.PieceType
 import com.mirandadevsource.ajedrezzz.domain.model.Position
+import com.mirandadevsource.ajedrezzz.domain.storage.InMemoryGameStorage
+import com.mirandadevsource.ajedrezzz.ui.game.AppScreen
 import com.mirandadevsource.ajedrezzz.ui.game.ChessUiEvent
 import com.mirandadevsource.ajedrezzz.ui.game.ChessViewModel
 import com.mirandadevsource.ajedrezzz.ui.game.GameMode
@@ -287,5 +289,126 @@ class ChessViewModelTest {
         assertEquals(PieceType.QUEEN, e8Square.piece?.type)
         assertEquals(PieceColor.WHITE, e8Square.piece?.color)
         assertEquals("e8=D", vm.uiState.value.moveHistory.first().whiteMove)
+    }
+
+    @Test
+    fun `start new game from main menu switches screen to game with selected mode`() {
+        assertEquals(AppScreen.MAIN_MENU, viewModel.uiState.value.currentScreen)
+
+        viewModel.onEvent(ChessUiEvent.StartNewGame(GameMode.VS_BOT, BotDifficulty.MEDIUM))
+
+        val state = viewModel.uiState.value
+        assertEquals(AppScreen.GAME, state.currentScreen)
+        assertEquals(GameMode.VS_BOT, state.gameMode)
+        assertEquals(BotDifficulty.MEDIUM, state.botDifficulty)
+        assertFalse(state.showPauseDialog)
+    }
+
+    @Test
+    fun `pause and resume game toggles pause dialog`() {
+        viewModel.onEvent(ChessUiEvent.StartNewGame(GameMode.PASS_AND_PLAY))
+        assertFalse(viewModel.uiState.value.showPauseDialog)
+
+        viewModel.onEvent(ChessUiEvent.PauseClicked)
+        assertTrue(viewModel.uiState.value.showPauseDialog)
+
+        viewModel.onEvent(ChessUiEvent.ResumeGameClicked)
+        assertFalse(viewModel.uiState.value.showPauseDialog)
+    }
+
+    @Test
+    fun `suspend game saves state and returns to main menu with suspended game available`() {
+        val storage = InMemoryGameStorage()
+        val vm = ChessViewModel(gameStorage = storage, botDispatcher = testDispatcher)
+
+        // Start game and make 1 move (e2 -> e4)
+        vm.onEvent(ChessUiEvent.StartNewGame(GameMode.PASS_AND_PLAY))
+        vm.onEvent(ChessUiEvent.SquareClicked(Position.fromAlgebraic("e2")))
+        vm.onEvent(ChessUiEvent.SquareClicked(Position.fromAlgebraic("e4")))
+
+        // Pause and suspend
+        vm.onEvent(ChessUiEvent.PauseClicked)
+        vm.onEvent(ChessUiEvent.SuspendAndExitClicked)
+
+        // Verifications
+        assertEquals(AppScreen.MAIN_MENU, vm.uiState.value.currentScreen)
+        assertTrue(vm.uiState.value.hasSuspendedGame)
+        assertFalse(vm.uiState.value.showPauseDialog)
+        assertTrue(storage.hasSavedGame())
+
+        val saved = storage.loadGame()
+        assertNotNull(saved)
+        assertEquals(1, saved?.moveHistory?.size)
+        assertEquals("e4", saved?.moveHistory?.first()?.whiteMove)
+    }
+
+    @Test
+    fun `resuming suspended game restores exact position and history`() {
+        val storage = InMemoryGameStorage()
+        val vm1 = ChessViewModel(gameStorage = storage, botDispatcher = testDispatcher)
+
+        vm1.onEvent(ChessUiEvent.StartNewGame(GameMode.PASS_AND_PLAY))
+        vm1.onEvent(ChessUiEvent.SquareClicked(Position.fromAlgebraic("e2")))
+        vm1.onEvent(ChessUiEvent.SquareClicked(Position.fromAlgebraic("e4")))
+        vm1.onEvent(ChessUiEvent.SquareClicked(Position.fromAlgebraic("d7")))
+        vm1.onEvent(ChessUiEvent.SquareClicked(Position.fromAlgebraic("d5")))
+        vm1.onEvent(ChessUiEvent.SuspendAndExitClicked)
+
+        // Create fresh ViewModel with the same storage (simulating app restart)
+        val vm2 = ChessViewModel(gameStorage = storage, botDispatcher = testDispatcher)
+        assertTrue(vm2.uiState.value.hasSuspendedGame)
+        assertEquals(AppScreen.MAIN_MENU, vm2.uiState.value.currentScreen)
+
+        // Resume game
+        vm2.onEvent(ChessUiEvent.ResumeSuspendedGame)
+
+        val resumedState = vm2.uiState.value
+        assertEquals(AppScreen.GAME, resumedState.currentScreen)
+        assertEquals(PieceColor.WHITE, resumedState.sideToMove)
+        assertEquals(1, resumedState.moveHistory.size)
+        assertEquals("e4", resumedState.moveHistory.first().whiteMove)
+        assertEquals("d5", resumedState.moveHistory.first().blackMove)
+
+        val e4Square = resumedState.squares.first { it.position == Position.fromAlgebraic("e4") }
+        assertEquals(PieceType.PAWN, e4Square.piece?.type)
+        assertEquals(PieceColor.WHITE, e4Square.piece?.color)
+
+        val d5Square = resumedState.squares.first { it.position == Position.fromAlgebraic("d5") }
+        assertEquals(PieceType.PAWN, d5Square.piece?.type)
+        assertEquals(PieceColor.BLACK, d5Square.piece?.color)
+    }
+
+    @Test
+    fun `resigning game marks game over and clears suspended game`() {
+        val storage = InMemoryGameStorage()
+        val vm = ChessViewModel(gameStorage = storage, botDispatcher = testDispatcher)
+
+        vm.onEvent(ChessUiEvent.StartNewGame(GameMode.PASS_AND_PLAY))
+        vm.onEvent(ChessUiEvent.SquareClicked(Position.fromAlgebraic("e2")))
+        vm.onEvent(ChessUiEvent.SquareClicked(Position.fromAlgebraic("e4")))
+        // Suspend
+        vm.onEvent(ChessUiEvent.SuspendAndExitClicked)
+        assertTrue(storage.hasSavedGame())
+
+        // Resume and resign
+        vm.onEvent(ChessUiEvent.ResumeSuspendedGame)
+        vm.onEvent(ChessUiEvent.PauseClicked)
+        vm.onEvent(ChessUiEvent.ResignGameClicked)
+
+        val state = vm.uiState.value
+        assertTrue(state.gameStatus.isGameOver)
+        assertEquals(GameStatus.CHECKMATE, state.gameStatus)
+        assertFalse(storage.hasSavedGame())
+        assertFalse(state.hasSuspendedGame)
+        assertFalse(state.showPauseDialog)
+    }
+
+    @Test
+    fun `return to main menu navigates back`() {
+        viewModel.onEvent(ChessUiEvent.StartNewGame(GameMode.PASS_AND_PLAY))
+        assertEquals(AppScreen.GAME, viewModel.uiState.value.currentScreen)
+
+        viewModel.onEvent(ChessUiEvent.ReturnToMainMenuClicked)
+        assertEquals(AppScreen.MAIN_MENU, viewModel.uiState.value.currentScreen)
     }
 }

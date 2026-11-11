@@ -8,10 +8,12 @@ import com.mirandadevsource.ajedrezzz.domain.model.GameStatus
 import com.mirandadevsource.ajedrezzz.domain.model.MoveLogItem
 import com.mirandadevsource.ajedrezzz.domain.model.MoveNotationHelper
 import com.mirandadevsource.ajedrezzz.domain.model.MoveResult
-import com.mirandadevsource.ajedrezzz.domain.model.Piece
 import com.mirandadevsource.ajedrezzz.domain.model.PieceColor
 import com.mirandadevsource.ajedrezzz.domain.model.PieceType
 import com.mirandadevsource.ajedrezzz.domain.model.Position
+import com.mirandadevsource.ajedrezzz.domain.storage.GameStorage
+import com.mirandadevsource.ajedrezzz.domain.storage.InMemoryGameStorage
+import com.mirandadevsource.ajedrezzz.domain.storage.SavedGameState
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -24,6 +26,7 @@ import kotlinx.coroutines.withContext
 
 class ChessViewModel(
     private val bridge: ChessEngineBridge = ChessEngineBridge(),
+    private val gameStorage: GameStorage = InMemoryGameStorage(),
     private val botDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) : ViewModel() {
 
@@ -33,6 +36,9 @@ class ChessViewModel(
     private fun createInitialState(): ChessUiState {
         val (whiteAdv, blackAdv) = bridge.getMaterialAdvantage()
         return ChessUiState(
+            currentScreen = AppScreen.MAIN_MENU,
+            hasSuspendedGame = gameStorage.hasSavedGame(),
+            showPauseDialog = false,
             squares = bridge.getAllSquares(),
             selectedPosition = null,
             sideToMove = bridge.sideToMove,
@@ -54,6 +60,13 @@ class ChessViewModel(
 
     fun onEvent(event: ChessUiEvent) {
         when (event) {
+            is ChessUiEvent.StartNewGame -> handleStartNewGame(event.mode, event.difficulty)
+            is ChessUiEvent.ResumeSuspendedGame -> handleResumeSuspendedGame()
+            is ChessUiEvent.PauseClicked -> _uiState.update { it.copy(showPauseDialog = true) }
+            is ChessUiEvent.ResumeGameClicked -> _uiState.update { it.copy(showPauseDialog = false) }
+            is ChessUiEvent.SuspendAndExitClicked -> handleSuspendAndExit()
+            is ChessUiEvent.ResignGameClicked -> handleResignGame()
+            is ChessUiEvent.ReturnToMainMenuClicked -> handleReturnToMainMenu()
             is ChessUiEvent.SquareClicked -> handleSquareClick(event.position)
             is ChessUiEvent.PromotionSelected -> handlePromotionSelected(event.pieceType)
             is ChessUiEvent.PromotionDismissed -> handlePromotionDismissed()
@@ -64,6 +77,118 @@ class ChessViewModel(
             is ChessUiEvent.ToggleThreatsClicked -> handleToggleThreats()
             is ChessUiEvent.ChangeGameMode -> handleChangeGameMode(event.mode)
             is ChessUiEvent.ChangeBotDifficulty -> handleChangeBotDifficulty(event.difficulty)
+        }
+    }
+
+    private fun handleStartNewGame(mode: GameMode, difficulty: BotDifficulty) {
+        bridge.reset()
+        val (whiteAdv, blackAdv) = bridge.getMaterialAdvantage()
+        _uiState.update {
+            it.copy(
+                currentScreen = AppScreen.GAME,
+                gameMode = mode,
+                botDifficulty = difficulty,
+                showPauseDialog = false,
+                squares = bridge.getAllSquares(),
+                selectedPosition = null,
+                pendingPromotion = null,
+                sideToMove = bridge.sideToMove,
+                gameStatus = bridge.getGameStatus(),
+                isBotThinking = false,
+                isFlipped = false,
+                isAutoFlipEnabled = false,
+                canUndo = false,
+                showThreats = false,
+                whiteMaterialAdvantage = whiteAdv,
+                blackMaterialAdvantage = blackAdv,
+                moveHistory = emptyList(),
+                capturedByWhite = emptyList(),
+                capturedByBlack = emptyList(),
+                lastMoveFrom = null,
+                lastMoveTo = null,
+                statusMessage = getStatusText(bridge.getGameStatus(), bridge.sideToMove)
+            )
+        }
+    }
+
+    private fun handleResumeSuspendedGame() {
+        val saved = gameStorage.loadGame() ?: return
+        bridge.loadFen(saved.fen)
+        val (whiteAdv, blackAdv) = bridge.getMaterialAdvantage()
+
+        _uiState.update {
+            it.copy(
+                currentScreen = AppScreen.GAME,
+                gameMode = saved.gameMode,
+                botDifficulty = saved.botDifficulty,
+                showPauseDialog = false,
+                squares = bridge.getAllSquares(showThreats = saved.showThreats),
+                selectedPosition = null,
+                pendingPromotion = null,
+                sideToMove = bridge.sideToMove,
+                gameStatus = bridge.getGameStatus(),
+                isBotThinking = false,
+                isFlipped = saved.isFlipped,
+                isAutoFlipEnabled = saved.isAutoFlipEnabled,
+                canUndo = bridge.canUndo,
+                showThreats = saved.showThreats,
+                whiteMaterialAdvantage = whiteAdv,
+                blackMaterialAdvantage = blackAdv,
+                moveHistory = saved.moveHistory,
+                statusMessage = getStatusText(bridge.getGameStatus(), bridge.sideToMove)
+            )
+        }
+
+        if (saved.gameMode == GameMode.VS_BOT &&
+            bridge.sideToMove == PieceColor.BLACK &&
+            !bridge.getGameStatus().isGameOver
+        ) {
+            triggerBotMove()
+        }
+    }
+
+    private fun handleSuspendAndExit() {
+        gameStorage.saveGame(
+            SavedGameState(
+                fen = bridge.currentFen,
+                gameMode = _uiState.value.gameMode,
+                botDifficulty = _uiState.value.botDifficulty,
+                moveHistory = _uiState.value.moveHistory,
+                isFlipped = _uiState.value.isFlipped,
+                isAutoFlipEnabled = _uiState.value.isAutoFlipEnabled,
+                showThreats = _uiState.value.showThreats
+            )
+        )
+        _uiState.update {
+            it.copy(
+                currentScreen = AppScreen.MAIN_MENU,
+                showPauseDialog = false,
+                hasSuspendedGame = true
+            )
+        }
+    }
+
+    private fun handleResignGame() {
+        gameStorage.clearGame()
+        val loser = bridge.sideToMove
+        val winner = if (loser == PieceColor.WHITE) "Negras" else "Blancas"
+        _uiState.update {
+            it.copy(
+                showPauseDialog = false,
+                gameStatus = GameStatus.CHECKMATE,
+                statusMessage = "Partida abandonada. ¡Ganan las $winner!",
+                hasSuspendedGame = false
+            )
+        }
+    }
+
+    private fun handleReturnToMainMenu() {
+        _uiState.update {
+            it.copy(
+                currentScreen = AppScreen.MAIN_MENU,
+                showPauseDialog = false,
+                hasSuspendedGame = gameStorage.hasSavedGame()
+            )
         }
     }
 
@@ -88,7 +213,6 @@ class ChessViewModel(
         val pieceAtClicked = bridge.getPieceAt(position)
 
         if (selected == null) {
-            // No hay casilla seleccionada: seleccionamos si es pieza del turno actual
             if (pieceAtClicked != null && pieceAtClicked.color == bridge.sideToMove) {
                 _uiState.update { state ->
                     state.copy(
@@ -101,12 +225,9 @@ class ChessViewModel(
                 }
             }
         } else {
-            // Ya había una casilla seleccionada
             if (selected == position) {
-                // Click en la misma casilla: deseleccionar
                 clearSelection()
             } else if (pieceAtClicked != null && pieceAtClicked.color == bridge.sideToMove) {
-                // Click en otra pieza amiga: cambiar la selección
                 _uiState.update { state ->
                     state.copy(
                         selectedPosition = position,
@@ -117,17 +238,14 @@ class ChessViewModel(
                     )
                 }
             } else {
-                // Click en casilla destino: verificar si es legal
                 val legalDestinations = bridge.getLegalMovesFrom(selected)
                 if (legalDestinations.contains(position)) {
-                    // Verificar si es promoción de peón
                     if (bridge.isPromotion(selected, position)) {
                         _uiState.update { it.copy(pendingPromotion = Pair(selected, position)) }
                     } else {
                         executeMove(from = selected, to = position)
                     }
                 } else {
-                    // Click en casilla no permitida: deseleccionar
                     clearSelection()
                 }
             }
@@ -199,6 +317,10 @@ class ChessViewModel(
                 moveNotation
             )
 
+            if (newGameStatus.isGameOver) {
+                gameStorage.clearGame()
+            }
+
             _uiState.update { state ->
                 state.copy(
                     squares = bridge.getAllSquares(showThreats = state.showThreats),
@@ -215,11 +337,11 @@ class ChessViewModel(
                     moveHistory = updatedHistory,
                     lastMoveFrom = from,
                     lastMoveTo = to,
-                    isFlipped = newIsFlipped
+                    isFlipped = newIsFlipped,
+                    hasSuspendedGame = if (newGameStatus.isGameOver) false else state.hasSuspendedGame
                 )
             }
 
-            // Si estamos jugando contra el bot y es turno de Negras, se lanza el cálculo
             if (_uiState.value.gameMode == GameMode.VS_BOT &&
                 newSideToMove == PieceColor.BLACK &&
                 !newGameStatus.isGameOver
@@ -274,7 +396,6 @@ class ChessViewModel(
                 )
             }
 
-            // Retardo pedagógico para una respuesta humana y natural
             delay(450)
 
             val difficulty = _uiState.value.botDifficulty
@@ -334,12 +455,15 @@ class ChessViewModel(
 
     private fun handleReset() {
         bridge.reset()
+        gameStorage.clearGame()
         _uiState.value = createInitialState().copy(
+            currentScreen = AppScreen.GAME,
             gameMode = _uiState.value.gameMode,
             botDifficulty = _uiState.value.botDifficulty,
             isFlipped = _uiState.value.isFlipped,
             isAutoFlipEnabled = _uiState.value.isAutoFlipEnabled,
-            showThreats = _uiState.value.showThreats
+            showThreats = _uiState.value.showThreats,
+            hasSuspendedGame = false
         )
     }
 
