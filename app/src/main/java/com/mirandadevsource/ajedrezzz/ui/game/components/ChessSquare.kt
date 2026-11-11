@@ -39,6 +39,7 @@ fun ChessSquare(
     val backgroundColor = when {
         square.isCheck -> ChessColors.CheckHighlight
         square.isThreatened -> ChessColors.ThreatenedHighlight
+        square.isHintSource || square.isHintDestination -> ChessColors.HintHighlight
         square.isSelected -> ChessColors.SelectedSquare
         isLastMove -> ChessColors.LastMoveHighlight
         else -> baseColor
@@ -47,6 +48,7 @@ fun ChessSquare(
     val squareBorderModifier = when {
         square.isCheck -> Modifier.border(2.dp, ChessColors.CheckBorder)
         square.isThreatened -> Modifier.border(2.dp, ChessColors.ThreatenedBorder)
+        square.isHintSource || square.isHintDestination -> Modifier.border(2.5.dp, ChessColors.HintBorder)
         else -> Modifier
     }
 
@@ -100,12 +102,17 @@ fun ChessSquare(
 
         // Indicador pedagógico: Casilla de captura legal (anillo exterior)
         if (square.isCaptureDestination) {
+            val ringColor = when {
+                square.isDangerousDestination -> ChessColors.BlunderWarningRing
+                square.isSafeDestination -> ChessColors.SafeCaptureRing
+                else -> ChessColors.LegalCaptureRing
+            }
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .border(
                         width = 4.dp,
-                        color = ChessColors.LegalCaptureRing,
+                        color = ringColor,
                         shape = CircleShape
                     )
             )
@@ -113,10 +120,15 @@ fun ChessSquare(
 
         // Indicador pedagógico: Casilla de movimiento legal pacífico (punto central)
         if (square.isLegalDestination) {
+            val dotColor = when {
+                square.isDangerousDestination -> ChessColors.BlunderWarningDot
+                square.isSafeDestination -> ChessColors.SafeMoveDot
+                else -> ChessColors.LegalMoveDot
+            }
             Box(
                 modifier = Modifier
-                    .size(14.dp)
-                    .background(color = ChessColors.LegalMoveDot, shape = CircleShape)
+                    .size(if (square.isDangerousDestination || square.isSafeDestination) 15.dp else 14.dp)
+                    .background(color = dotColor, shape = CircleShape)
             )
         }
     }

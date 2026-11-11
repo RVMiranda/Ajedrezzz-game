@@ -51,6 +51,7 @@ import com.mirandadevsource.ajedrezzz.domain.model.GameStatus
 import com.mirandadevsource.ajedrezzz.domain.model.PieceColor
 import com.mirandadevsource.ajedrezzz.ui.game.components.CapturedPiecesBar
 import com.mirandadevsource.ajedrezzz.ui.game.components.ChessBoard
+import com.mirandadevsource.ajedrezzz.ui.game.components.GameOverDialog
 import com.mirandadevsource.ajedrezzz.ui.game.components.MoveHistoryScoresheet
 import com.mirandadevsource.ajedrezzz.ui.game.components.PauseDialog
 import com.mirandadevsource.ajedrezzz.ui.game.components.PromotionDialog
@@ -102,12 +103,22 @@ fun ChessGameScreen(
                         label = { Text("Tutor") },
                         modifier = Modifier.padding(end = 4.dp)
                     )
+                    if (state.showThreats) {
+                        FilledTonalButton(
+                            onClick = { viewModel.onEvent(ChessUiEvent.RequestHintClicked) },
+                            enabled = !state.isBotThinking && !state.gameStatus.isGameOver,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.padding(end = 4.dp)
+                        ) {
+                            Text("Pista", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
                     FilledTonalButton(
                         onClick = { viewModel.onEvent(ChessUiEvent.PauseClicked) },
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                         modifier = Modifier.padding(end = 8.dp)
                     ) {
-                        Text("⏸ Pausa", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Pausa", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -175,9 +186,42 @@ fun ChessGameScreen(
                 }
             }
 
-            if (state.showThreats) {
+            // Banner o pista del Modo Tutor
+            if (state.hintExplanation != null) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "💡 ${state.hintExplanation}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(
+                            onClick = { viewModel.onEvent(ChessUiEvent.ClearHintClicked) },
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                        ) {
+                            Text("Cerrar", fontSize = 11.sp)
+                        }
+                    }
+                }
+            } else if (state.showThreats) {
                 Text(
-                    text = "Modo Tutor activo: piezas amenazadas marcadas en naranja",
+                    text = "Tutor: verde = casilla segura • naranja = casilla atacada",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Medium,
@@ -330,22 +374,12 @@ fun ChessGameScreen(
         )
     }
 
-    // Diálogo de Fin de Partida
+    // Diálogo de Fin de Partida Enriquecido con Animación y Resumen Estadístico
     if (state.gameStatus.isGameOver) {
-        AlertDialog(
-            onDismissRequest = { },
-            title = { Text("¡Fin de la Partida!") },
-            text = { Text(state.statusMessage) },
-            confirmButton = {
-                Button(onClick = { viewModel.onEvent(ChessUiEvent.ResetGameClicked) }) {
-                    Text("Jugar otra vez")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.onEvent(ChessUiEvent.ReturnToMainMenuClicked) }) {
-                    Text("Menú Principal")
-                }
-            }
+        GameOverDialog(
+            state = state,
+            onPlayAgain = { viewModel.onEvent(ChessUiEvent.ResetGameClicked) },
+            onMainMenu = { viewModel.onEvent(ChessUiEvent.ReturnToMainMenuClicked) }
         )
     }
 }

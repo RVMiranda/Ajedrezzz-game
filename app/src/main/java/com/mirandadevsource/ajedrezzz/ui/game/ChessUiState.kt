@@ -19,6 +19,14 @@ enum class GameMode {
     VS_BOT         // Contra el dispositivo
 }
 
+enum class GameOutcome {
+    VICTORY,        // Victoria del jugador (en vs Bot)
+    DEFEAT,         // Derrota del jugador (en vs Bot)
+    DRAW,           // Tablas / Empate
+    VICTORY_WHITE,  // Victoria de Blancas (en 2 Jugadores)
+    VICTORY_BLACK   // Victoria de Negras (en 2 Jugadores)
+}
+
 data class ChessUiState(
     val currentScreen: AppScreen = AppScreen.MAIN_MENU,
     val hasSuspendedGame: Boolean = false,
@@ -42,8 +50,38 @@ data class ChessUiState(
     val whiteMaterialAdvantage: Int = 0,
     val blackMaterialAdvantage: Int = 0,
     val pendingPromotion: Pair<Position, Position>? = null,
-    val moveHistory: List<MoveLogItem> = emptyList()
-)
+    val moveHistory: List<MoveLogItem> = emptyList(),
+    val hintMove: Pair<Position, Position>? = null,
+    val hintExplanation: String? = null
+) {
+    val totalTurnsCount: Int
+        get() = moveHistory.size
+
+    val whiteChecksCount: Int
+        get() = moveHistory.count { it.whiteMove.endsWith("+") || it.whiteMove.endsWith("#") }
+
+    val blackChecksCount: Int
+        get() = moveHistory.count { it.blackMove?.let { m -> m.endsWith("+") || m.endsWith("#") } == true }
+
+    fun getOutcome(): GameOutcome {
+        return when (gameMode) {
+            GameMode.VS_BOT -> {
+                when {
+                    gameStatus == GameStatus.CHECKMATE && sideToMove == PieceColor.BLACK -> GameOutcome.VICTORY
+                    gameStatus == GameStatus.CHECKMATE && sideToMove == PieceColor.WHITE -> GameOutcome.DEFEAT
+                    else -> GameOutcome.DRAW
+                }
+            }
+            GameMode.PASS_AND_PLAY -> {
+                when {
+                    gameStatus == GameStatus.CHECKMATE && sideToMove == PieceColor.BLACK -> GameOutcome.VICTORY_WHITE
+                    gameStatus == GameStatus.CHECKMATE && sideToMove == PieceColor.WHITE -> GameOutcome.VICTORY_BLACK
+                    else -> GameOutcome.DRAW
+                }
+            }
+        }
+    }
+}
 
 sealed class ChessUiEvent {
     data class StartNewGame(val mode: GameMode, val difficulty: BotDifficulty = BotDifficulty.EASY) : ChessUiEvent()
@@ -61,6 +99,8 @@ sealed class ChessUiEvent {
     data object ToggleFlipClicked : ChessUiEvent()
     data object ToggleAutoFlipClicked : ChessUiEvent()
     data object ToggleThreatsClicked : ChessUiEvent()
+    data object RequestHintClicked : ChessUiEvent()
+    data object ClearHintClicked : ChessUiEvent()
     data class ChangeGameMode(val mode: GameMode) : ChessUiEvent()
     data class ChangeBotDifficulty(val difficulty: BotDifficulty) : ChessUiEvent()
 }

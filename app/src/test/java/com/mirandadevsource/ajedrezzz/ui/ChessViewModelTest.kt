@@ -11,6 +11,7 @@ import com.mirandadevsource.ajedrezzz.ui.game.AppScreen
 import com.mirandadevsource.ajedrezzz.ui.game.ChessUiEvent
 import com.mirandadevsource.ajedrezzz.ui.game.ChessViewModel
 import com.mirandadevsource.ajedrezzz.ui.game.GameMode
+import com.mirandadevsource.ajedrezzz.ui.game.GameOutcome
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -410,5 +411,93 @@ class ChessViewModelTest {
 
         viewModel.onEvent(ChessUiEvent.ReturnToMainMenuClicked)
         assertEquals(AppScreen.MAIN_MENU, viewModel.uiState.value.currentScreen)
+    }
+
+    @Test
+    fun `tutor mode identifies safe legal destinations`() {
+        viewModel.onEvent(ChessUiEvent.StartNewGame(GameMode.PASS_AND_PLAY))
+        viewModel.onEvent(ChessUiEvent.ToggleThreatsClicked)
+        assertTrue(viewModel.uiState.value.showThreats)
+
+        // Select e2 pawn
+        val e2 = Position.fromAlgebraic("e2")
+        viewModel.onEvent(ChessUiEvent.SquareClicked(e2))
+
+        val e3 = viewModel.uiState.value.squares.first { it.position == Position.fromAlgebraic("e3") }
+        val e4 = viewModel.uiState.value.squares.first { it.position == Position.fromAlgebraic("e4") }
+        assertTrue(e3.isLegalDestination)
+        assertTrue(e3.isSafeDestination)
+        assertFalse(e3.isDangerousDestination)
+
+        assertTrue(e4.isLegalDestination)
+        assertTrue(e4.isSafeDestination)
+        assertFalse(e4.isDangerousDestination)
+    }
+
+    @Test
+    fun `tutor mode identifies dangerous legal destinations under opponent attack`() {
+        val bridge = ChessEngineBridge()
+        // White Queen on e4, Black pawn on d5 (attacks e4 and c4)
+        bridge.loadFen("4k3/8/8/3p4/4Q3/8/8/4K3 w - - 0 1")
+        val vm = ChessViewModel(bridge = bridge, botDispatcher = testDispatcher)
+        vm.onEvent(ChessUiEvent.StartNewGame(GameMode.PASS_AND_PLAY))
+        bridge.loadFen("4k3/8/8/3p4/4Q3/8/8/4K3 w - - 0 1")
+        vm.onEvent(ChessUiEvent.ToggleThreatsClicked)
+
+        val e4 = Position.fromAlgebraic("e4")
+        vm.onEvent(ChessUiEvent.SquareClicked(e4))
+
+        val c4Square = vm.uiState.value.squares.first { it.position == Position.fromAlgebraic("c4") }
+        assertTrue(c4Square.isLegalDestination)
+        assertTrue(c4Square.isDangerousDestination)
+        assertFalse(c4Square.isSafeDestination)
+
+        val e5Square = vm.uiState.value.squares.first { it.position == Position.fromAlgebraic("e5") }
+        assertTrue(e5Square.isLegalDestination)
+        assertTrue(e5Square.isSafeDestination)
+        assertFalse(e5Square.isDangerousDestination)
+    }
+
+    @Test
+    fun `request hint calculates move and explanation and clear hint resets it`() {
+        viewModel.onEvent(ChessUiEvent.StartNewGame(GameMode.PASS_AND_PLAY))
+        viewModel.onEvent(ChessUiEvent.ToggleThreatsClicked)
+
+        viewModel.onEvent(ChessUiEvent.RequestHintClicked)
+
+        val stateWithHint = viewModel.uiState.value
+        assertNotNull(stateWithHint.hintMove)
+        assertNotNull(stateWithHint.hintExplanation)
+        assertTrue(stateWithHint.squares.any { it.isHintSource })
+        assertTrue(stateWithHint.squares.any { it.isHintDestination })
+
+        viewModel.onEvent(ChessUiEvent.ClearHintClicked)
+        val stateCleared = viewModel.uiState.value
+        assertNull(stateCleared.hintMove)
+        assertNull(stateCleared.hintExplanation)
+        assertFalse(stateCleared.squares.any { it.isHintSource })
+        assertFalse(stateCleared.squares.any { it.isHintDestination })
+    }
+
+    @Test
+    fun `game outcome identifies victory defeat and draw correctly`() {
+        val stateVictory = viewModel.uiState.value.copy(
+            gameMode = GameMode.VS_BOT,
+            gameStatus = GameStatus.CHECKMATE,
+            sideToMove = PieceColor.BLACK
+        )
+        assertEquals(GameOutcome.VICTORY, stateVictory.getOutcome())
+
+        val stateDefeat = viewModel.uiState.value.copy(
+            gameMode = GameMode.VS_BOT,
+            gameStatus = GameStatus.CHECKMATE,
+            sideToMove = PieceColor.WHITE
+        )
+        assertEquals(GameOutcome.DEFEAT, stateDefeat.getOutcome())
+
+        val stateDraw = viewModel.uiState.value.copy(
+            gameStatus = GameStatus.STALEMATE
+        )
+        assertEquals(GameOutcome.DRAW, stateDraw.getOutcome())
     }
 }

@@ -185,9 +185,15 @@ class ChessEngineBridge(private val board: Board = Board()) {
         }
     }
 
+    fun isSquareAttackedByOpponent(position: Position, friendlyColor: PieceColor): Boolean {
+        val opponentSide = if (friendlyColor == PieceColor.WHITE) Side.BLACK else Side.WHITE
+        return board.squareAttackedBy(position.toSquare(), opponentSide) != 0L
+    }
+
     fun getAllSquares(
         selectedPosition: Position? = null,
-        showThreats: Boolean = false
+        showThreats: Boolean = false,
+        hintMove: Pair<Position, Position>? = null
     ): List<SquareUiModel> {
         val legalMoves = selectedPosition?.let { getLegalMovesFrom(it).toSet() } ?: emptySet()
         val kingInCheckPos = if (isKingInCheck()) getKingPosition(sideToMove) else null
@@ -204,6 +210,17 @@ class ChessEngineBridge(private val board: Board = Board()) {
                 val isCheck = kingInCheckPos == pos
                 val isThreatened = threatenedPieces.contains(pos)
 
+                val isDangerous = if (showThreats && isLegal) {
+                    isSquareAttackedByOpponent(pos, sideToMove)
+                } else false
+
+                val isSafe = if (showThreats && isLegal) {
+                    !isDangerous
+                } else false
+
+                val isHintSource = hintMove != null && hintMove.first == pos
+                val isHintDestination = hintMove != null && hintMove.second == pos
+
                 squares.add(
                     SquareUiModel(
                         position = pos,
@@ -211,6 +228,10 @@ class ChessEngineBridge(private val board: Board = Board()) {
                         isSelected = isSelected,
                         isLegalDestination = isLegal && !isCapture,
                         isCaptureDestination = isCapture,
+                        isSafeDestination = isSafe,
+                        isDangerousDestination = isDangerous,
+                        isHintSource = isHintSource,
+                        isHintDestination = isHintDestination,
                         isCheck = isCheck,
                         isThreatened = isThreatened
                     )
@@ -218,6 +239,38 @@ class ChessEngineBridge(private val board: Board = Board()) {
             }
         }
         return squares
+    }
+
+    /**
+     * Sugiere una jugada táctica del motor para el bando en turno (Pistas del Modo Tutor).
+     */
+    fun findHintMove(): Pair<Position, Position>? {
+        val bot = com.mirandadevsource.ajedrezzz.domain.ai.ChessBotEngine()
+        return bot.findBestMove(board, com.mirandadevsource.ajedrezzz.domain.ai.BotDifficulty.MEDIUM)
+    }
+
+    /**
+     * Genera una explicación pedagógica en español para la pista sugerida.
+     */
+    fun generateHintExplanation(from: Position, to: Position): String {
+        val piece = getPieceAt(from) ?: return "Mueve tu pieza a ${to.algebraic} para mejorar tu juego."
+        val targetPiece = getPieceAt(to)
+        val pieceName = when (piece.type) {
+            PieceType.PAWN -> "el Peón"
+            PieceType.KNIGHT -> "el Caballo"
+            PieceType.BISHOP -> "el Alfil"
+            PieceType.ROOK -> "la Torre"
+            PieceType.QUEEN -> "la Dama"
+            PieceType.KING -> "el Rey"
+        }
+
+        return when {
+            targetPiece != null -> "Captura con $pieceName en ${to.algebraic} para ganar material."
+            piece.type == PieceType.KING && kotlin.math.abs(from.file - to.file) == 2 -> "Enróquese para proteger al Rey y activar la Torre."
+            piece.type == PieceType.PAWN && (to.rank == 3 || to.rank == 4) && (to.file == 3 || to.file == 4) -> "Avanza $pieceName a ${to.algebraic} para controlar el centro."
+            piece.type == PieceType.KNIGHT || piece.type == PieceType.BISHOP -> "Desarrolla $pieceName hacia ${to.algebraic} para ganar actividad."
+            else -> "Mueve $pieceName a ${to.algebraic} para mejorar tu posición."
+        }
     }
 
     companion object {

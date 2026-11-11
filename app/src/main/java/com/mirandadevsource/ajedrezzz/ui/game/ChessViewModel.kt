@@ -75,6 +75,8 @@ class ChessViewModel(
             is ChessUiEvent.ToggleFlipClicked -> handleToggleFlip()
             is ChessUiEvent.ToggleAutoFlipClicked -> handleToggleAutoFlip()
             is ChessUiEvent.ToggleThreatsClicked -> handleToggleThreats()
+            is ChessUiEvent.RequestHintClicked -> handleRequestHint()
+            is ChessUiEvent.ClearHintClicked -> handleClearHint()
             is ChessUiEvent.ChangeGameMode -> handleChangeGameMode(event.mode)
             is ChessUiEvent.ChangeBotDifficulty -> handleChangeBotDifficulty(event.difficulty)
         }
@@ -197,9 +199,47 @@ class ChessViewModel(
             val nextThreats = !state.showThreats
             state.copy(
                 showThreats = nextThreats,
+                hintMove = if (!nextThreats) null else state.hintMove,
+                hintExplanation = if (!nextThreats) null else state.hintExplanation,
                 squares = bridge.getAllSquares(
                     selectedPosition = state.selectedPosition,
-                    showThreats = nextThreats
+                    showThreats = nextThreats,
+                    hintMove = if (!nextThreats) null else state.hintMove
+                )
+            )
+        }
+    }
+
+    private fun handleRequestHint() {
+        val currentState = _uiState.value
+        if (currentState.gameStatus.isGameOver || currentState.isBotThinking) return
+
+        val hint = bridge.findHintMove() ?: return
+        val explanation = bridge.generateHintExplanation(hint.first, hint.second)
+
+        _uiState.update { state ->
+            state.copy(
+                hintMove = hint,
+                hintExplanation = explanation,
+                selectedPosition = null,
+                squares = bridge.getAllSquares(
+                    selectedPosition = null,
+                    showThreats = state.showThreats,
+                    hintMove = hint
+                )
+            )
+        }
+    }
+
+    private fun handleClearHint() {
+        _uiState.update { state ->
+            state.copy(
+                hintMove = null,
+                hintExplanation = null,
+                squares = bridge.getAllSquares(
+                    selectedPosition = state.selectedPosition,
+                    showThreats = state.showThreats,
+                    hintMove = null
                 )
             )
         }
@@ -217,12 +257,16 @@ class ChessViewModel(
                 _uiState.update { state ->
                     state.copy(
                         selectedPosition = position,
+                        hintMove = null,
+                        hintExplanation = null,
                         squares = bridge.getAllSquares(
                             selectedPosition = position,
                             showThreats = state.showThreats
                         )
                     )
                 }
+            } else if (currentState.hintMove != null) {
+                handleClearHint()
             }
         } else {
             if (selected == position) {
@@ -231,6 +275,8 @@ class ChessViewModel(
                 _uiState.update { state ->
                     state.copy(
                         selectedPosition = position,
+                        hintMove = null,
+                        hintExplanation = null,
                         squares = bridge.getAllSquares(
                             selectedPosition = position,
                             showThreats = state.showThreats
@@ -326,6 +372,8 @@ class ChessViewModel(
                     squares = bridge.getAllSquares(showThreats = state.showThreats),
                     selectedPosition = null,
                     pendingPromotion = null,
+                    hintMove = null,
+                    hintExplanation = null,
                     sideToMove = newSideToMove,
                     gameStatus = newGameStatus,
                     canUndo = bridge.canUndo,
@@ -439,6 +487,8 @@ class ChessViewModel(
                 squares = bridge.getAllSquares(showThreats = state.showThreats),
                 selectedPosition = null,
                 pendingPromotion = null,
+                hintMove = null,
+                hintExplanation = null,
                 sideToMove = side,
                 gameStatus = status,
                 canUndo = bridge.canUndo,
@@ -504,6 +554,8 @@ class ChessViewModel(
         _uiState.update { state ->
             state.copy(
                 selectedPosition = null,
+                hintMove = null,
+                hintExplanation = null,
                 squares = bridge.getAllSquares(
                     selectedPosition = null,
                     showThreats = state.showThreats

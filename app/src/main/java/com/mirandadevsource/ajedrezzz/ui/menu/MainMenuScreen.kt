@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -25,6 +26,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,6 +54,7 @@ fun MainMenuScreen(
     modifier: Modifier = Modifier
 ) {
     var selectedDifficulty by remember { mutableStateOf(BotDifficulty.EASY) }
+    var pendingNewGame by remember { mutableStateOf<Pair<GameMode, BotDifficulty>?>(null) }
     val scrollState = rememberScrollState()
 
     Scaffold(modifier = modifier.fillMaxSize()) { innerPadding ->
@@ -188,7 +191,7 @@ fun MainMenuScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Entrena contra el oponente virtual. Puedes activar el Modo Tutor para ver amenazas en tiempo real.",
+                            text = "Entrena contra el oponente virtual. Puedes activar el Modo Tutor para ver amenazas y casillas seguras en tiempo real.",
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -217,12 +220,16 @@ fun MainMenuScreen(
 
                         Button(
                             onClick = {
-                                onEvent(
-                                    ChessUiEvent.StartNewGame(
-                                        mode = GameMode.VS_BOT,
-                                        difficulty = selectedDifficulty
+                                if (state.hasSuspendedGame) {
+                                    pendingNewGame = Pair(GameMode.VS_BOT, selectedDifficulty)
+                                } else {
+                                    onEvent(
+                                        ChessUiEvent.StartNewGame(
+                                            mode = GameMode.VS_BOT,
+                                            difficulty = selectedDifficulty
+                                        )
                                     )
-                                )
+                                }
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -259,9 +266,13 @@ fun MainMenuScreen(
                         )
                         Button(
                             onClick = {
-                                onEvent(
-                                    ChessUiEvent.StartNewGame(mode = GameMode.PASS_AND_PLAY)
-                                )
+                                if (state.hasSuspendedGame) {
+                                    pendingNewGame = Pair(GameMode.PASS_AND_PLAY, BotDifficulty.EASY)
+                                } else {
+                                    onEvent(
+                                        ChessUiEvent.StartNewGame(mode = GameMode.PASS_AND_PLAY)
+                                    )
+                                }
                             },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.secondary
@@ -289,5 +300,44 @@ fun MainMenuScreen(
                 )
             }
         }
+    }
+
+    // Diálogo de Advertencia si ya existe una partida suspendida
+    if (pendingNewGame != null) {
+        AlertDialog(
+            onDismissRequest = { pendingNewGame = null },
+            title = {
+                Text(
+                    text = "¿Iniciar nueva partida?",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Text(
+                    text = "Tienes una partida guardada en proceso. Si comienzas una nueva partida, se perderá el progreso de la partida anterior.",
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val (mode, diff) = pendingNewGame!!
+                        pendingNewGame = null
+                        onEvent(ChessUiEvent.StartNewGame(mode = mode, difficulty = diff))
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Iniciar de todos modos")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingNewGame = null }) {
+                    Text("Cancelar")
+                }
+            }
+        )
     }
 }
